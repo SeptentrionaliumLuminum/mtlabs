@@ -3,14 +3,18 @@ using System.Diagnostics;
 
 namespace Lab2
 {
-    class Performance : IDisposable
+    internal class PerformanceCounter : IDisposable
     {
         private Stopwatch stopwatch;
         private string message;
 
-        public Performance(string msg)
+        private DateTime startDate;
+
+        public PerformanceCounter(string message)
         {
-            message = msg;
+            this.message = message;
+
+            startDate = DateTime.Now;
             stopwatch = new Stopwatch();
             stopwatch.Start();
         }

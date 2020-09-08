@@ -3,18 +3,19 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using MPI;
+using Newtonsoft.Json;
 
 namespace Lab2.Data
 {
     [Serializable]
     public class Jacoby
     {
-        private Matrix coefficients;
-        private Matrix freeMembers;
+        public Matrix coefficients;
+        public Matrix freeMembers;
 
-        private Matrix initialStep;
+        public Matrix initialStep;
 
-        private double precision;
+        public double precision;
 
         public Jacoby(Matrix matrix, Matrix initialStep, double precision)
         {
@@ -26,41 +27,62 @@ namespace Lab2.Data
             this.precision = precision;
         }
 
-        public static void MPIWorker(Communicator communicator)
+        public static void MPIWorker(Intracommunicator communicator)
         {
-            Jacoby jacoby;
+            Jacoby jacoby = null;
             ReceiveRequest request;
-            using (var perf = new Performance($"{communicator.Rank} wait for Jacoby "))
+            using (var perf = new PerformanceCounter($"Comm {communicator.Rank} waiting for Jacoby duration: "))
             {
-                request = communicator.ImmediateReceive<Jacoby>(0, Consts.JacobyMessage);
-                request.Wait();
-                jacoby = request.GetValue() as Jacoby;
+                communicator.Broadcast<Jacoby>(ref jacoby, 0);
             }
 
             bool inProcess = true;
 
-            while (inProcess)
+            using (var totalPerformance = new PerformanceCounter($"Comm {communicator.Rank} total work duration: "))
             {
-                using (var perf = new Performance($"{communicator.Rank} cycle in "))
+                int cycleIndex = 0;
+                while (inProcess)
                 {
-                    request = communicator.ImmediateReceive<JobToDo>(0, Consts.CalculatePart);
-                    request.Wait();
-                    JobToDo jobToDo = request.GetValue() as JobToDo;
-                    if (jobToDo.finish)
-                        return;
+                    using (var perf = new PerformanceCounter($"Comm {communicator.Rank} cycle {cycleIndex} duration: "))
+                    {
+                        JobToDo jobToDo = null;
 
-                    var result = jacoby.PartialCalculation(jobToDo.start, jobToDo.end, jobToDo.initial);
-                    communicator.ImmediateSend<JobDone>(new JobDone(result), 0, Consts.JobDone);
+                        using (var perfRecv = new PerformanceCounter($"Comm {communicator.Rank} waiting for job-to-do (cycle {cycleIndex}): "))
+                        {
+                            request = communicator.ImmediateReceive<JobToDo>(0, (int)JacobyMessageType.CalculatePart);
+                            request.Wait();
+                            jobToDo = request.GetValue() as JobToDo;
+                            if (jobToDo.finish)
+                            {
+                                Console.WriteLine($"Comm {communicator.Rank} receive FINISH signal");
+                                return;
+                            }
+                        }
+
+                        using (var perfWork = new PerformanceCounter($"Comm {communicator.Rank} work duration (cycle {cycleIndex}): "))
+                        {
+                            Console.WriteLine($"Comm {communicator.Rank} start={jobToDo.start} end={jobToDo.end}");
+                            var result = jacoby.PartialCalculation(jobToDo.start, jobToDo.end, jobToDo.initial);
+                            var srequest = communicator.ImmediateSend<JobDone>(new JobDone(result), 0, (int)JacobyMessageType.JobDone);
+                        }
+                    }
+                    cycleIndex++;
                 }
             }
         }
 
-        public double[] MPIHead(Communicator communicator)
+        private void SendMatrixToWorkers(Intracommunicator communicator)
         {
-            for (int r = 1; r < communicator.Size; r++)
+            using (var perfCounter = new PerformanceCounter("Master. Broadcasting Jacoby: "))
             {
-                communicator.ImmediateSend<Jacoby>(this, r, Consts.JacobyMessage);
+                var jacoby = this;
+                communicator.Broadcast<Jacoby>(ref jacoby, 0);
             }
+        }
+
+        public double[] MPIHead(Intracommunicator communicator)
+        {
+            SendMatrixToWorkers(communicator);
 
             int parts = communicator.Size - 1;
 
@@ -72,55 +94,63 @@ namespace Lab2.Data
 
             var portion = matrixSize / parts;
 
+            int cycleIndex = 0;
             do
             {
-                List<double[]> calculations = new List<double[]>();
-
-                for (int part = 0; part < parts; part++)
+                using (var perfCycle = new PerformanceCounter($"Master. Cycle {cycleIndex} work duration: "))
                 {
-                    var start = part * portion;
-                    var end = (part + 1) * portion;
+                    List<double[]> calculations = new List<double[]>();
 
-                    if (start >= matrixSize)
-                        break;
-
-                    if (part == parts - 1)
-                        end = matrixSize;
-
-                    var jobToDo = new JobToDo(start, end, initial);
-                    communicator.ImmediateSend(jobToDo, part + 1, Consts.CalculatePart);
-                }
-
-                ReceiveRequest[] requests = new ReceiveRequest[parts];
-
-                for (int part = 0; part < parts; part++)
-                {
-                    requests[part] = communicator.ImmediateReceive<JobDone>(part + 1, Consts.JobDone);
-                }
-
-                using (var perf = new Performance($"Wait for sync in "))
-                {
                     for (int part = 0; part < parts; part++)
                     {
-                        requests[part].Wait();
-                        calculations.Add((requests[part].GetValue() as JobDone).array);
+                        var start = part * portion;
+                        var end = (part + 1) * portion;
+
+                        if (start >= matrixSize)
+                            break;
+
+                        if (part == parts - 1)
+                            end = matrixSize;
+
+                        Console.WriteLine($"Part {part} size: {end - start}");
+
+                        var jobToDo = new JobToDo(start, end, initial);
+                        var request = communicator.ImmediateSend(jobToDo, part + 1, (int)JacobyMessageType.CalculatePart);
                     }
-                }
 
-                double[] currentStepXs = Merge(calculations);
+                    ReceiveRequest[] requests = new ReceiveRequest[parts];
 
-                currentAccuracy = Math.Abs(initial[0] - currentStepXs[0]);
-                for (int row = 0; row < matrixSize; row++)
-                {
-                    if (Math.Abs(initialStep[row, 0] - currentStepXs[row]) > currentAccuracy)
-                        currentAccuracy = Math.Abs(initial[row] - currentStepXs[row]);
-                    initial[row] = currentStepXs[row];
+                    for (int part = 0; part < parts; part++)
+                    {
+                        requests[part] = communicator.ImmediateReceive<JobDone>(part + 1, (int)JacobyMessageType.JobDone);
+                    }
+
+                    using (var perf = new PerformanceCounter($"Master. Wait for sync (cycle {cycleIndex}): "))
+                    {
+                        for (int part = 0; part < parts; part++)
+                        {
+                            requests[part].Wait();
+                            calculations.Add((requests[part].GetValue() as JobDone).array);
+                        }
+                    }
+
+                    double[] currentStepXs = Merge(calculations);
+
+                    currentAccuracy = Math.Abs(initial[0] - currentStepXs[0]);
+                    for (int row = 0; row < matrixSize; row++)
+                    {
+                        if (Math.Abs(initialStep[row, 0] - currentStepXs[row]) > currentAccuracy)
+                            currentAccuracy = Math.Abs(initial[row] - currentStepXs[row]);
+                        initial[row] = currentStepXs[row];
+                    }
                 }
             }
             while (currentAccuracy > precision);
 
+            Request[] srequests = new Request[parts];
+
             for (int i = 0; i < parts; i++)
-                communicator.ImmediateSend<JobToDo>(new JobToDo(true), i + 1, Consts.CalculatePart);
+                 srequests[i] = communicator.ImmediateSend<JobToDo>(new JobToDo(true), i + 1, (int)JacobyMessageType.CalculatePart);
 
             return initial;
         }

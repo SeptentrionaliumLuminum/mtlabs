@@ -3,9 +3,9 @@
 namespace Lab2.Data
 {
     [Serializable]
-    public class Matrix
+    public struct Matrix
     {
-        private readonly double[,] matrix;
+        public double[,] matrix { get; set; }
 
         public Matrix(int height, int width)
         {

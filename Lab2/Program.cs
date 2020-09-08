@@ -1,6 +1,5 @@
 ﻿using System;
-using System.Diagnostics;
-
+using System.Threading;
 using Lab2.Data;
 using Lab2.Services;
 
@@ -12,27 +11,51 @@ namespace Lab2
     {
         static void Main(string[] args)
         {
-            //EquationGenerator.Generate(args[0], args[1], 2000);
+            //EquationGenerator.Generate(args[0], args[1], 1681);
 
+            DoParallelJacoby(args);
+        }
+
+        static void DoParallelJacoby(string[] args)
+        {
             MPI.Environment.Run(ref args, communicator =>
             {
-                if (communicator.Rank == 0)
+
+                Console.WriteLine($"{communicator.Rank} birthday!");
+
+                var isMaster = communicator.Rank == 0;
+
+                if (isMaster)
                 {
-                    Stopwatch stopwatch = new Stopwatch();
-                    stopwatch.Start();
+                    double[] result = null;
 
-                    Jacoby jacoby = EquationReader.ReadJacoby(args[0], args[1], double.Parse(args[2]));
-                    double[] result = jacoby.MPIHead(communicator);
-                    //double[] result = jacoby.SolveSingleThreadDebug(2);
+                    using (var performanceCounter = new PerformanceCounter("Master. Total duration: "))
+                    {
+                        Jacoby jacoby = null;
 
-                    stopwatch.Stop();
-                    Console.WriteLine($"Time elapsed: {stopwatch.ElapsedMilliseconds}");
+                        using (var perfRead = new PerformanceCounter("Master. Jacoby reading time: "))
+                        {
+                            jacoby = EquationReader.ReadJacoby(args[0], args[1], double.Parse(args[2]));
+                        }
+
+                        using (var perfWork = new PerformanceCounter("Master. Work duration: "))
+                        {
+                            result = jacoby.MPIHead(communicator);
+                            //double[] result = jacoby.SolveSingleThreadDebug(2);
+                        }
+                    }
+
+                    if (result == null)
+                        throw new Exception("Result is null");
 
                     EquationWriter.Write(result, args[3]);
                 }
                 else
                 {
-                    Jacoby.MPIWorker(communicator);
+                    using (var perfCounter = new PerformanceCounter($"Worker {communicator.Rank} total lifetime: "))
+                    {
+                        Jacoby.MPIWorker(communicator);
+                    }
                 }
             });
         }
@@ -48,11 +71,11 @@ namespace Lab2
 
                 //Send data
                 for (int workerIndex = 1; workerIndex < communicator.Size; workerIndex++)
-                    communicator.Send(jacoby, workerIndex, Consts.JacobyMessage);
+                    communicator.Send(jacoby, workerIndex, (int)JacobyMessageType.JacobyMessage);
             }
             else
             {
-                var jacoby = communicator.Receive<Jacoby>(0, Consts.JacobyMessage);
+                var jacoby = communicator.Receive<Jacoby>(0, (int)JacobyMessageType.JacobyMessage);
                 var result = jacoby.SolveSingleThread();
                 foreach (var val in result)
                     Console.WriteLine($"I, worker of rank {communicator.Rank} calculate {val}");

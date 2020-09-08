@@ -36,6 +36,9 @@
     <Reference Include="MPI, Version=1.4.0.0, Culture=neutral, PublicKeyToken=29b4a045737654fe, processorArchitecture=MSIL">
       <HintPath>packages\MPI.NET.1.4.0\lib\netstandard2.0\MPI.dll</HintPath>
     </Reference>
+    <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>packages\Newtonsoft.Json.12.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -46,12 +49,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Data\Consts.cs" />
     <Compile Include="Data\Jacoby.cs" />
+    <Compile Include="Data\JacobyMessageType.cs" />
     <Compile Include="Data\JobDone.cs" />
     <Compile Include="Data\JobToDo.cs" />
     <Compile Include="Data\Matrix.cs" />
-    <Compile Include="Performance.cs" />
+    <Compile Include="PerformanceCounter.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\EquationGenerator.cs" />
