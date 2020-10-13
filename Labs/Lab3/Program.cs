@@ -11,7 +11,7 @@ namespace Lab3
     {
         internal static void Main(string[] args)
         {
-            //ReaderWriter.Generate(args[0], 40960000);
+            //ReaderWriter.Generate(args[0], 20480000);
             MultiThreaded(args);
         }
 
@@ -49,8 +49,12 @@ namespace Lab3
 
         private static bool Verify(IList<int> result, string inputFile)
         {
+            QuickSort.UseMedian = false;
+
             var array = ReaderWriter.Read(inputFile);
             QuickSort.Sort(array, 0, array.Count - 1);
+
+            QuickSort.UseMedian = true;
 
             for (int index = 0; index < result.Count; index++)
                 if (result[index] != array[index])

@@ -34,7 +34,6 @@ namespace Lab3.Services
 
         private const int doWorkTag = 28;
         private const int receiveResultTag = 56;
-        private const int terminateTag = 110;
 
         private readonly Intracommunicator communicator;
 
@@ -49,7 +48,7 @@ namespace Lab3.Services
         public IList<int> ParallelSort(IList<int> array, int low, int high)
         {
             ParallelQuickSort(array, low, high);
-            CollectPackages(array);
+            CollectPackagesFromChilds(array);
 
             return array;
         }
@@ -73,7 +72,7 @@ namespace Lab3.Services
             var arrayAsList = package.Array.ToList();
             deep = package.Deep;
             ParallelQuickSort(arrayAsList, 0, arrayAsList.Count - 1);
-            CollectPackages(arrayAsList);
+            CollectPackagesFromChilds(arrayAsList);
 
             var responsePackage = new DataPackage(arrayAsList.ToArray(), package.Low, package.High, deep);
             communicator.ImmediateSend(responsePackage, parentRank, receiveResultTag);
@@ -102,10 +101,10 @@ namespace Lab3.Services
             throw new ArgumentOutOfRangeException(nameof(communicator.Rank));
         }
 
-        private void CollectPackages(IList<int> array)
+        private void CollectPackagesFromChilds(IList<int> array)
         {
             var requests = waitingList.Select(rank => communicator.ImmediateReceive<DataPackage>(rank, receiveResultTag)).ToList();
-
+            
             while (requests.Count > 0)
             {
                 var completed = requests.Where(r => r.Test() != null);
@@ -114,12 +113,12 @@ namespace Lab3.Services
                 foreach (var request in completed)
                 {
                     var dataPackage = request.GetValue() as DataPackage;
-                    Transfer(dataPackage, array);
+                    TransferResultFromChildToArray(dataPackage, array);
                 }
             }
         }
 
-        private void Transfer(DataPackage package, IList<int> array)
+        private void TransferResultFromChildToArray(DataPackage package, IList<int> array)
         {
             for (int index = package.Low; index <= package.High; index++)
                 array[index] = package.Array[index - package.Low];
