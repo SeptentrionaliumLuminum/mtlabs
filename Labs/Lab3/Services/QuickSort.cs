@@ -3,9 +3,15 @@ using System.Collections.Generic;
 
 namespace Lab3.Services
 {
+    internal enum PivotType
+    {
+        Middle,
+        Median
+    }
+
     internal static class QuickSort
     {
-        public static bool UseMedian = true;
+        public static PivotType PivotType = PivotType.Median;
 
         internal static void Sort<T>(IList<T> array, int low, int high) where T : IComparable<T>
         {
@@ -19,10 +25,14 @@ namespace Lab3.Services
 
         internal static int Partition<T>(IList<T> array, int low, int high) where T : IComparable<T>
         {
-            if (UseMedian)
-                return PartitionUsingMedian(array, low, high);
-            else
-                return PartitionUsingMiddle(array, low, high);
+            switch (PivotType)
+            {
+                case PivotType.Median:
+                    return PartitionUsingMedian(array, low, high);
+                case PivotType.Middle:
+                default:
+                    return PartitionUsingMiddle(array, low, high);
+            }               
         }
 
         internal static int PartitionUsingMedian<T>(IList<T> array, int low, int high) where T : IComparable<T>
@@ -95,7 +105,7 @@ namespace Lab3.Services
             }
         }
 
-        private static void Swap<T>(IList<T> array, int firstIndex, int secondIndex)
+        public static void Swap<T>(IList<T> array, int firstIndex, int secondIndex)
         {
             var temp = array[firstIndex];
             array[firstIndex] = array[secondIndex];

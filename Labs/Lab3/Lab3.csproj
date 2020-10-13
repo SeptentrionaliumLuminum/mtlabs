@@ -49,6 +49,9 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\MPIQuickSort.cs" />
+    <Compile Include="Services\CommunicatorGroup.cs" />
+    <Compile Include="Services\QSArray.cs" />
+    <Compile Include="Services\QSorter.cs" />
     <Compile Include="Services\QuickSort.cs" />
     <Compile Include="Services\ReaderWriter.cs" />
   </ItemGroup>

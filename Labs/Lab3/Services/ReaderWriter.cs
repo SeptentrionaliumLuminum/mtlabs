@@ -8,7 +8,7 @@ namespace Lab3.Services
 {
     public static class ReaderWriter
     {
-        public static IList<int> Read(string inputFile)
+        public static List<int> Read(string inputFile)
         {
             var inputString = File.ReadAllText(inputFile);
             var splittedString = inputString.Split(' ');
